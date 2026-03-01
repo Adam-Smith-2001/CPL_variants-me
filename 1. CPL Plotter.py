@@ -115,7 +115,7 @@ fig.show()
 #plt.savefig("background", dpi = 300,  bbox_inches="tight")
 #%%
 #Equation of state
-data = np.loadtxt("Documents/GitHub/CPL/output/CPL08_background.dat")
+data = np.loadtxt("Documents/GitHub/CPL/output/CPL09_background.dat")
 data = data[22000:, :]
 
 

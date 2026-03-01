@@ -679,24 +679,30 @@ int background_w_fld(
   /** - first, define the function w(a) */
   switch (pba->fluid_equation_of_state) {
   case CLP:
-    if (pba->ac<=1){
+    if (pba->ac<=1 && pba->ac >=0){
       if (pba->wa_fld == 0.){
         *w_fld = pba->w0_fld;
+        //printf("w = %g \n", *w_fld);
         break;
-      }else if(a>pba->ac){
+      }else if(a<pba->ac){
         *w_fld = pba->w0_fld + pba->wa_fld * (1. - a);
-        break;
-      }else if(pba->wa_fld > 0){
-        *w_fld = -1.001;
+        //printf("w = %g \n", *w_fld);
         break;
       }else if(pba->wa_fld < 0){
+        *w_fld = -1.001;
+        //printf("w = %g \n", *w_fld);
+        break;
+      }else if(pba->wa_fld > 0){
         *w_fld = -0.999;
+        //printf("w = %g \n", *w_fld);
         break;
       }}
     else{
       *w_fld = pba->w0_fld + pba->wa_fld * (1. - a);
+      //printf("w = %g \n", *w_fld);
       break;
     }
+    
 
 
   case EDE:
@@ -732,17 +738,17 @@ int background_w_fld(
       function, let's use it! */
   switch (pba->fluid_equation_of_state) {
     case CLP:
-      if (pba->ac<=1){
+      if (pba->ac<=1 && pba->ac >=0){
         if (pba->wa_fld == 0.){
           *dw_over_da_fld = 0.;
           break;
-        }else if(a>pba->ac){
+        }else if(a<pba->ac){
           *dw_over_da_fld =  -pba->wa_fld ;
           break;
-        }else if(pba->wa_fld > 0){
+        }else if(pba->wa_fld < 0){
           *dw_over_da_fld = 0.;
           break;
-        }else if(pba->wa_fld < 0){
+        }else if(pba->wa_fld > 0){
           *dw_over_da_fld = 0.;
           break;
         }}
@@ -771,18 +777,24 @@ int background_w_fld(
       fast, simple, and accurate enough. */
   switch (pba->fluid_equation_of_state) {
   case CLP:
-    if (pba->ac<=1){
+    if (pba->ac<=1 && pba->ac >=0){
       if (pba->wa_fld == 0.){
         *integral_fld = 3.*(1.+pba->w0_fld)*log(1./a);
         break;
-      }else if(a>pba->ac){
-        *integral_fld = 3.*((1.+pba->w0_fld+pba->wa_fld)*log(1./a) + pba->wa_fld*(a-1.));
+      }else if(a<pba->ac && pba->wa_fld > 0){
+        *integral_fld = 0.003*log(1./pba->ac) + 3.*pba->wa_fld*(a-pba->ac)+3.*(1.+pba->w0_fld+pba->wa_fld)*log(pba->ac/a);
+        //*integral_fld = 3.*((1.+pba->w0_fld+pba->wa_fld)*log(1./a) + pba->wa_fld*(a-1.));
         break;
-      }else if(pba->wa_fld > 0){
-        *integral_fld = -0.003*log(pba->ac/a)+3.*((1.+pba->w0_fld+pba->wa_fld)*log(1./pba->ac) + pba->wa_fld*(pba->ac-1.));;
+      }else if(a<pba->ac && pba->wa_fld < 0){
+        *integral_fld = -0.003*log(1./pba->ac) + 3.*pba->wa_fld*(a-pba->ac)+3.*(1.+pba->w0_fld+pba->wa_fld)*log(pba->ac/a);
+        //*integral_fld = 3.*((1.+pba->w0_fld+pba->wa_fld)*log(1./a) + pba->wa_fld*(a-1.));
+        break;
+      }
+      else if(pba->wa_fld > 0){
+        *integral_fld = 0.003*log(1./a);
         break;
       }else if(pba->wa_fld < 0){
-        *integral_fld = 0.003*log(pba->ac/a)+3.*((1.+pba->w0_fld+pba->wa_fld)*log(1./pba->ac) + pba->wa_fld*(pba->ac-1.));;
+        *integral_fld = -0.003*log(1./a);
         break;
       }}
     else{
