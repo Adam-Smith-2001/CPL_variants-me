@@ -519,7 +519,7 @@ int input_shooting(struct file_content * pfc,
   double param1, param2;
   double * unknown_parameter;
   int unknown_parameters_size;
-  int counter, index_target, i;
+  int counter, index_target;
   int fevals=0;
   double xzero;
   double *dxdF, *x_inout;
@@ -931,6 +931,12 @@ int input_find_root(double *xzero,
 
   (*fevals)++;
   dx = 1.5*f1*dxdy;
+  if(fabs(dx) < x1*_EPSILON_){
+    /* In this special case, we are very close to the correct location already
+       (or are even at the exact correct location) */
+    *xzero = x1;
+    return _SUCCESS_;
+  }
 
   /** Then we do a linear hunt for the boundaries */
   /* Try fifteen times to go above and below the root (i.e. where shooting succeeds) */
@@ -1189,9 +1195,10 @@ int input_get_guess(double *xguess,
       break;
     case Neff:
       for(index_ncdm=0;index_ncdm<ba.N_ncdm;++index_ncdm){
-        N_nonur_guess += ba.deg_ncdm[index_ncdm]* 1.0132;
+        N_nonur_guess += ba.deg_ncdm[index_ncdm]* pow(ba.T_ncdm[index_ncdm],4)/pow(4./11.,(4./3.));
       }
       N_nonur_guess += ba.Omega0_idr/ba.Omega0_g/(7./8.)*pow(11./4.,(4./3.));
+
       xguess[index_guess] = pfzw->target_value[index_guess] - N_nonur_guess;
       dxdy[index_guess] = 1.;
       break;
@@ -1590,12 +1597,20 @@ int input_read_precisions(struct file_content * pfc,
 #include "precisions.h"
 #undef __ASSIGN_DEFAULT_PRECISION__
 
+  /** The base path is a special precision parameter
+       and is assigned here manually to its default value
+      It is the path relative to which CLASS will look for all files */
+  strcpy(ppr->base_path,__CLASSDIR__);
+
   /** Read all precision parameters from input (these very concise
       lines parse all precision parameters thanks to the macros
       defined in macros_precision.h) */
 #define __PARSE_PRECISION_PARAMETER__
 #include "precisions.h"
 #undef __PARSE_PRECISION_PARAMETER__
+
+  /** Now read the relative base path, overwriting possibly the default */
+  class_read_string("base_path",ppr->base_path);
 
   return _SUCCESS_;
 
@@ -1656,7 +1671,7 @@ int input_read_parameters(struct file_content * pfc,
    * This function is exclusively for those parameters, NOT
    *  related to any physical species
    * */
-  class_call(input_read_parameters_general(pfc,pba,pth,ppt,psd,
+  class_call(input_read_parameters_general(pfc,pba,pth,ppt,pfo,psd,
                                            errmsg),
              errmsg,
              errmsg);
@@ -1733,6 +1748,7 @@ int input_read_parameters(struct file_content * pfc,
  * @param pba     Input: pointer to background structure
  * @param pth     Input: pointer to thermodynamics structure
  * @param ppt     Input: pointer to perturbation structure
+ * @param pfo     Input: pointer to fourier structure
  * @param psd     Input: pointer to distorsion structure
  * @param errmsg  Input: Error message
  * @return the error status
@@ -1742,6 +1758,7 @@ int input_read_parameters_general(struct file_content * pfc,
                                   struct background * pba,
                                   struct thermodynamics * pth,
                                   struct perturbations * ppt,
+                                  struct fourier * pfo,
                                   struct distortions * psd,
                                   ErrorMsg errmsg){
 
@@ -2093,6 +2110,9 @@ int input_read_parameters_general(struct file_content * pfc,
 
   /** 4.c) Do we want matter and baryon+CDM sources in current gauge, instead of automatic conversion to gauge-invariant variables? */
   class_read_flag("matter_source_in_current_gauge",ppt->has_matter_source_in_current_gauge);
+
+  /** 4.d) Do we want output perturbations in current gauge, instead of automatic conversion to Newtonian variables? */
+  class_read_flag("get_perturbations_in_current_gauge",ppt->get_perturbations_in_current_gauge);
 
   /** 5) h in [-] and H_0/c in [1/Mpc = h/2997.9 = h*10^5/c] */
   /* Read */
@@ -3291,7 +3311,6 @@ int input_read_parameters_species(struct file_content * pfc,
       else{
       pba->ac = 1+(1+pba->w0_fld)/pba->wa_fld;
       }
-      printf("ac = %g", pba->ac);
     }
     if (pba->fluid_equation_of_state == EDE) {
       /** 8.a.2.3) Equation of state of the fluid in 'EDE' case */
@@ -3721,61 +3740,103 @@ int input_read_parameters_nonlinear(struct file_content * pfc,
       ppt->has_nl_corrections_based_on_delta_m = _TRUE_;
       class_read_int("extrapolation_method",pfo->extrapolation_method);
 
-      class_call(parser_read_string(pfc,
-                                    "feedback model",
-                                    &(string1),
-                                    &(flag1),
-                                    errmsg),
+      class_call(parser_read_string(pfc,"hmcode_version",&string1,&flag1,errmsg),
                  errmsg,
                  errmsg);
+      /* Compatibility code BEGIN */
+      if(flag1 == _FALSE_){
+        class_call(parser_read_string(pfc,"HMcode_version",&string1,&flag1,errmsg),
+                   errmsg,
+                   errmsg);
+      }
+      if(flag1 == _FALSE_){
+        class_call(parser_read_string(pfc,"hmcode version",&string1,&flag1,errmsg),
+                   errmsg,
+                   errmsg);
+      }
 
+      /* Compatibility code END */
       if (flag1 == _TRUE_) {
-
-        if (strstr(string1,"emu_dmonly") != NULL) {
-          pfo->feedback = nl_emu_dmonly;
+        if ((strstr(string1,"15") != NULL)||(strstr(string1,"16") != NULL)) {
+          pfo->hm_version = hmcode_version_2015;
         }
-        if (strstr(string1,"owls_dmonly") != NULL) {
-          pfo->feedback = nl_owls_dmonly;
+        else if ((strstr(string1,"20baryon") != NULL) || (strstr(string1,"20_baryon") != NULL)) {
+          pfo->hm_version = hmcode_version_2020_baryonic;
         }
-        if (strstr(string1,"owls_ref") != NULL) {
-          pfo->feedback = nl_owls_ref;
+        else if ((strstr(string1,"20") != NULL)) {
+          pfo->hm_version = hmcode_version_2020;
         }
-        if (strstr(string1,"owls_agn") != NULL) {
-          pfo->feedback = nl_owls_agn;
-        }
-        if (strstr(string1,"owls_dblim") != NULL) {
-          pfo->feedback = nl_owls_dblim;
+        else{
+          class_stop(errmsg,
+                     "You specified 'hmcode_version' = '%s'. It has to be one of {'2015','2020','2020_baryonic_feedback'}.",string1);
         }
       }
 
-      class_call(parser_read_double(pfc,"eta_0",&param2,&flag2,errmsg),
-                 errmsg,
-                 errmsg);
-      class_call(parser_read_double(pfc,"c_min",&param3,&flag3,errmsg),
-                 errmsg,
-                 errmsg);
+      if (pfo->hm_version == hmcode_version_2015) {
 
-      class_test(((flag1 == _TRUE_) && ((flag2 == _TRUE_) || (flag3 == _TRUE_))),
-                 errmsg,
-                 "In input file, you cannot enter both a baryonic feedback model and a choice of baryonic feedback parameters, choose one of both methods");
+        class_call(parser_read_string(pfc,"feedback_model",&string1,&flag1,errmsg),
+                   errmsg,
+                   errmsg);
 
-      if ((flag2 == _TRUE_) && (flag3 == _TRUE_)) {
-        pfo->feedback = nl_user_defined;
-        class_read_double("eta_0", pfo->eta_0);
-        class_read_double("c_min", pfo->c_min);
-      }
-      else if ((flag2 == _TRUE_) && (flag3 == _FALSE_)) {
-        pfo->feedback = nl_user_defined;
-        class_read_double("eta_0", pfo->eta_0);
-        pfo->c_min = (0.98 - pfo->eta_0)/0.12;
-      }
-      else if ((flag2 == _FALSE_) && (flag3 == _TRUE_)) {
-        pfo->feedback = nl_user_defined;
-        class_read_double("c_min", pfo->c_min);
-        pfo->eta_0 = 0.98 - 0.12*pfo->c_min;
-      }
+        /* Compatibility code BEGIN */
+        if (flag1 == _FALSE_) {
+          class_call(parser_read_string(pfc,"feedback model",&string1,&flag1,errmsg),
+                     errmsg,
+                     errmsg);
+        }
+        /* Compatibility code END */
 
+        if (flag1 == _TRUE_) {
+
+          if (strstr(string1,"emu_dmonly") != NULL) {
+            pfo->feedback = hmcode_emu_dmonly;
+          }
+          if (strstr(string1,"owls_dmonly") != NULL) {
+            pfo->feedback = hmcode_owls_dmonly;
+          }
+          if (strstr(string1,"owls_ref") != NULL) {
+            pfo->feedback = hmcode_owls_ref;
+          }
+          if (strstr(string1,"owls_agn") != NULL) {
+            pfo->feedback = hmcode_owls_agn;
+          }
+          if (strstr(string1,"owls_dblim") != NULL) {
+            pfo->feedback = hmcode_owls_dblim;
+          }
+        }
+
+        class_call(parser_read_double(pfc,"eta_0",&param2,&flag2,errmsg),
+                   errmsg,
+                   errmsg);
+        class_call(parser_read_double(pfc,"c_min",&param3,&flag3,errmsg),
+                   errmsg,
+                   errmsg);
+
+        class_test(((flag1 == _TRUE_) && ((flag2 == _TRUE_) || (flag3 == _TRUE_))),
+                   errmsg,
+                   "In input file, you cannot enter both a baryonic feedback model and a choice of baryonic feedback parameters, choose one of both methods");
+
+        if ((flag2 == _TRUE_) && (flag3 == _TRUE_)) {
+          pfo->feedback = hmcode_user_defined;
+          class_read_double("eta_0", pfo->eta_0);
+          class_read_double("c_min", pfo->c_min);
+        }
+        else if ((flag2 == _TRUE_) && (flag3 == _FALSE_)) {
+          pfo->feedback = hmcode_user_defined;
+          class_read_double("eta_0", pfo->eta_0);
+          pfo->c_min = (0.98 - pfo->eta_0)/0.12;
+        }
+        else if ((flag2 == _FALSE_) && (flag3 == _TRUE_)) {
+          pfo->feedback = hmcode_user_defined;
+          class_read_double("c_min", pfo->c_min);
+          pfo->eta_0 = 0.98 - 0.12*pfo->c_min;
+        }
+      }
+      else if (pfo->hm_version == hmcode_version_2020_baryonic) {
+        class_read_double("log10T_heat_hmcode",pfo->log10T_heat_hmcode);
+      }
       class_read_double("z_infinity", pfo->z_infinity);
+      class_read_int("nk_wiggle", pfo->nk_wiggle);
     }
     else if (strstr(string1,"no")!=NULL){
       pfo->method=nl_none;
@@ -3803,6 +3864,15 @@ int input_read_parameters_nonlinear(struct file_content * pfc,
         pfo->has_pk_eq = _TRUE_;
       }
     }
+  }
+
+  /** 2.a) analytic nowiggle linear spectrum */
+  class_read_flag("analytic_nowiggle", pfo->has_pk_analytic_nowiggle);
+
+  /** 2.b) numerical nowiggle linear spectrum (can be computed only if the linear power spectrum is computed) */
+
+  if (ppt->has_pk_matter == _TRUE_) {
+    class_read_flag("numerical_nowiggle", pfo->has_pk_numerical_nowiggle);
   }
 
   return _SUCCESS_;
@@ -5694,6 +5764,8 @@ int input_default_params(struct background *pba,
   ppt->has_Nbody_gauge_transfers = _FALSE_;
   /** 4.c) keep delta_m, theta_m, delta_cb, theta_cb in current gauge */
   ppt->has_matter_source_in_current_gauge = _FALSE_;
+  /** 4.d) keep output perturbations in current gauge */
+  ppt->get_perturbations_in_current_gauge = _FALSE_;
 
   /** 5) Hubble parameter */
   pba->h = 0.67810;
@@ -5927,8 +5999,16 @@ int input_default_params(struct background *pba,
   pfo->method = nl_none;
   pfo->has_pk_eq = _FALSE_;
   pfo->extrapolation_method = extrap_max_scaled;
-  pfo->feedback = nl_emu_dmonly;
+  pfo->feedback = hmcode_emu_dmonly;
+  pfo->hm_version = hmcode_version_2020;
   pfo->z_infinity = 10.;
+  pfo->has_pk_numerical_nowiggle = _FALSE_;
+  pfo->pk_l_nw_index = &(pfo->index_pk_cluster);
+
+  pfo->log10T_heat_hmcode = 7.8;
+  pfo->nk_wiggle = 512;
+
+  pfo->has_pk_analytic_nowiggle = _FALSE_;
 
   /**
    * Default to input_read_parameters_primordial
