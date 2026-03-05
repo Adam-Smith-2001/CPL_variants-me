@@ -54,10 +54,9 @@ struct background
    * e.g. for dark energy or decaying dark matter). */
 
   //@{
-
+  double ac;
   double H0; /**< \f$ H_0 \f$: Hubble parameter (in fact, [\f$H_0/c\f$]) in \f$ Mpc^{-1} \f$ */
   double h;  /**< reduced Hubble parameter */
-  double ac;
 
   double Omega0_g; /**< \f$ \Omega_{0 \gamma} \f$: photons */
   double T_cmb;    /**< \f$ T_{cmb} \f$: current CMB temperature in Kelvins */
@@ -168,7 +167,6 @@ struct background
   int index_bg_rho_idm;       /**< idm density */
   int index_bg_rho_lambda;    /**< cosmological constant density */
   int index_bg_rho_fld;       /**< fluid density */
-  int index_bg_p_fld; 
   int index_bg_w_fld;         /**< fluid equation of state */
   int index_bg_rho_idr;       /**< density of interacting dark radiation */
   int index_bg_rho_ur;        /**< relativistic neutrinos/relics density */

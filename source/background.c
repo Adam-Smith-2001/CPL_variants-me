@@ -545,7 +545,7 @@ int background_functions(
     /* get w_fld from dedicated function */
     class_call(background_w_fld(pba,a,&w_fld,&dw_over_da,&integral_fld), pba->error_message, pba->error_message);
     pvecback[pba->index_bg_w_fld] = w_fld;
-    pvecback[pba->index_bg_p_fld] = w_fld*pvecback[pba->index_bg_rho_fld];
+
     // Obsolete: at the beginning, we had here the analytic integral solution corresponding to the case w=w0+w1(1-a/a0):
     // pvecback[pba->index_bg_rho_fld] = pba->Omega0_fld * pow(pba->H0,2) / pow(a,3.*(1.+pba->w0_fld+pba->wa_fld)) * exp(3.*pba->wa_fld*(a-1.));
     // But now everthing is integrated numerically for a given w_fld(a) defined in the function background_w_fld.
@@ -673,9 +673,7 @@ int background_w_fld(
   double dOmega_ede_over_da = 0.;
   double d2Omega_ede_over_da2 = 0.;
   double a_eq, Omega_r, Omega_m;
-  
-  double test = pba->w0_fld + pba->wa_fld * (1. - a);
-  //printf("test = %g, ac = %g \n", test, pba->ac);
+
   /** - first, define the function w(a) */
   switch (pba->fluid_equation_of_state) {
   case CLP:
@@ -702,7 +700,7 @@ int background_w_fld(
       //printf("w = %g \n", *w_fld);
       break;
     }
-    
+
 
 
   case EDE:
@@ -756,13 +754,13 @@ int background_w_fld(
         *dw_over_da_fld =  -pba->wa_fld ;
         break;
       }
-    case EDE:
-      d2Omega_ede_over_da2 = 0.;
-      *dw_over_da_fld = - d2Omega_ede_over_da2*a/3./(1.-Omega_ede)/Omega_ede
-        - dOmega_ede_over_da/3./(1.-Omega_ede)/Omega_ede
-        + dOmega_ede_over_da*dOmega_ede_over_da*a/3./(1.-Omega_ede)/(1.-Omega_ede)/Omega_ede
-        + a_eq/3./(a+a_eq)/(a+a_eq);
-      break;
+  case EDE:
+    d2Omega_ede_over_da2 = 0.;
+    *dw_over_da_fld = - d2Omega_ede_over_da2*a/3./(1.-Omega_ede)/Omega_ede
+      - dOmega_ede_over_da/3./(1.-Omega_ede)/Omega_ede
+      + dOmega_ede_over_da*dOmega_ede_over_da*a/3./(1.-Omega_ede)/(1.-Omega_ede)/Omega_ede
+      + a_eq/3./(a+a_eq)/(a+a_eq);
+    break;
   }
 
   /** - finally, give the analytic solution of the following integral:
@@ -1143,7 +1141,7 @@ int background_indices(
   /* - index for fluid */
   class_define_index(pba->index_bg_rho_fld,pba->has_fld,index_bg,1);
   class_define_index(pba->index_bg_w_fld,pba->has_fld,index_bg,1);
-  class_define_index(pba->index_bg_p_fld,pba->has_fld,index_bg,1);
+
   /* - index for ultra-relativistic neutrinos/species */
   class_define_index(pba->index_bg_rho_ur,pba->has_ur,index_bg,1);
 
@@ -2535,12 +2533,15 @@ int background_output_titles(
   class_store_columntitle(titles,"(.)p_tot",_TRUE_);
   class_store_columntitle(titles,"(.)p_tot_prime",_TRUE_);
 
+  class_store_columntitle(titles,"Omega_r(z)",_TRUE_);
+  class_store_columntitle(titles,"Omega_m(z)",_TRUE_);
+
   class_store_columntitle(titles,"gr.fac. D",_TRUE_);
   class_store_columntitle(titles,"gr.fac. f",_TRUE_);
 
   class_store_columntitle(titles,"rel. alpha",pba->has_varconst);
   class_store_columntitle(titles,"rel. m_e",pba->has_varconst);
-  class_store_columntitle(titles,"(.)p_scf",pba->has_fld);
+
   return _SUCCESS_;
 }
 
@@ -2608,12 +2609,14 @@ int background_output_data(
     class_store_double(dataptr,pvecback[pba->index_bg_p_tot],_TRUE_,storeidx);
     class_store_double(dataptr,pvecback[pba->index_bg_p_tot_prime],_TRUE_,storeidx);
 
+    class_store_double(dataptr,pvecback[pba->index_bg_Omega_r],_TRUE_,storeidx);
+    class_store_double(dataptr,pvecback[pba->index_bg_Omega_m],_TRUE_,storeidx);
+
     class_store_double(dataptr,pvecback[pba->index_bg_D],_TRUE_,storeidx);
     class_store_double(dataptr,pvecback[pba->index_bg_f],_TRUE_,storeidx);
 
     class_store_double(dataptr,pvecback[pba->index_bg_varc_alpha],pba->has_varconst,storeidx);
     class_store_double(dataptr,pvecback[pba->index_bg_varc_me],pba->has_varconst,storeidx);
-    class_store_double(dataptr,pvecback[pba->index_bg_p_fld],pba->has_fld,storeidx);
   }
 
   return _SUCCESS_;
